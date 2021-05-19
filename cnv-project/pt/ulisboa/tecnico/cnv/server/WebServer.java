@@ -175,7 +175,27 @@ public class WebServer {
     statistics.get(Thread.currentThread().getId()).addMCount();
   }
 
+  public static synchronized void countBasicBlocks(int toAdd) {
+    statistics.get(Thread.currentThread().getId()).addBBCount();
+  }
+
   public static synchronized void countInstructions(int toAdd) {
     statistics.get(Thread.currentThread().getId()).addICount(toAdd);
+  }
+
+  public static synchronized void countFieldLoads(int toAdd) {
+    statistics.get(Thread.currentThread().getId()).addFLCount();
+  }
+
+  public static synchronized void countFieldStores(int toAdd) {
+    statistics.get(Thread.currentThread().getId()).addFSCount();
+  }
+
+  public static synchronized void countLoads(int toAdd) {
+    statistics.get(Thread.currentThread().getId()).addLCount();
+  }
+
+  public static synchronized void countStores(int toAdd) {
+    statistics.get(Thread.currentThread().getId()).addSCount();
   }
 }
