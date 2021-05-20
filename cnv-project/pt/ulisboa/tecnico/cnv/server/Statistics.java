@@ -11,6 +11,10 @@ public class Statistics {
   private int fsCount;
   private int lCount;
   private int sCount;
+  private int nCount;
+  private int naCount;
+  private int anaCount;
+  private int manaCount;
 
 
   public Statistics(String query) {
@@ -22,6 +26,10 @@ public class Statistics {
     this.fsCount = 0;
     this.lCount = 0;
     this.sCount = 0;
+    this.nCount = 0;
+    this.naCount = 0;
+    this.anaCount = 0;
+    this.manaCount = 0;
   }
 
   public String getQuery() {
@@ -114,5 +122,53 @@ public class Statistics {
 
   public void addSCount() {
     this.sCount++;
+  }
+
+  public int getNCount() {
+    return this.nCount;
+  }
+
+  public void setNCount(int nCount) {
+    this.nCount = nCount;
+  }
+
+  public void addNCount() {
+    this.nCount++;
+  }
+
+  public int getNACount() {
+    return this.naCount;
+  }
+
+  public void setNACount(int naCount) {
+    this.naCount = naCount;
+  }
+
+  public void addNACount() {
+    this.naCount++;
+  }
+
+  public int getANACount() {
+    return this.anaCount;
+  }
+
+  public void setANACount(int anaCount) {
+    this.anaCount = anaCount;
+  }
+
+  public void addANACount() {
+    this.anaCount++;
+  }
+
+  public int getMANACount() {
+    return this.manaCount;
+  }
+
+  public void setMANACount(int manaCount) {
+    this.manaCount = manaCount;
+  }
+
+  public void addMANACount() {
+    this.manaCount++;
   }
 }

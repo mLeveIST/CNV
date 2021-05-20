@@ -155,8 +155,17 @@ public class WebServer {
           final Statistics currStatistics = statistics.get(Thread.currentThread().getId());
 
           writer.println(currStatistics.getQuery());
-          writer.println(currStatistics.getICount());
-          writer.println(currStatistics.getMCount());
+          writer.println("Method Calls: " + currStatistics.getMCount());
+          writer.println("Basic Blocks Traced: " + currStatistics.getBBCount());
+          writer.println("Instructions Executed: " + currStatistics.getICount());
+          writer.println("Field Loads: " + currStatistics.getFLCount());
+          writer.println("Field Stores: " + currStatistics.getFSCount());
+          writer.println("Loads: " + currStatistics.getLCount());
+          writer.println("Stores: " + currStatistics.getSCount());
+          writer.println("New Allocations: " + currStatistics.getNCount());
+          writer.println("New Array Allocations: " + currStatistics.getNACount());
+          writer.println("'A' New Array Allocations: " + currStatistics.getANACount());
+          writer.println("Multi 'A' New Array Allocations: " + currStatistics.getMANACount());
 
           writer.close();
 
@@ -197,5 +206,21 @@ public class WebServer {
 
   public static synchronized void countStores(int toAdd) {
     statistics.get(Thread.currentThread().getId()).addSCount();
+  }
+
+  public static synchronized void countNews(int toAdd) {
+    statistics.get(Thread.currentThread().getId()).addNCount();
+  }
+
+  public static synchronized void countNewArrays(int toAdd) {
+    statistics.get(Thread.currentThread().getId()).addNACount();
+  }
+
+  public static synchronized void countANewArrays(int toAdd) {
+    statistics.get(Thread.currentThread().getId()).addANACount();
+  }
+
+  public static synchronized void countMultiANewArrays(int toAdd) {
+    statistics.get(Thread.currentThread().getId()).addMANACount();
   }
 }

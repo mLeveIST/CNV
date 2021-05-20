@@ -1,3 +1,5 @@
+#!/bin/bash
+
 # Rollback .class files to original state
 rm -r pt/
 cp -r ../cnv/backup/pt/ .
@@ -11,7 +13,7 @@ javac -cp . BIT/myBIT/*.java
 javac -cp . pt/ulisboa/tecnico/cnv/server/*.java
 
 # Re-instrument code
-java -XX:-UseSplitVerifier BIT.myBIT.BITTool 0 pt/ulisboa/tecnico/cnv/solver/ pt/ulisboa/tecnico/cnv/solver/
+java -XX:-UseSplitVerifier BIT.myBIT.BITTool $1 pt/ulisboa/tecnico/cnv/solver/ pt/ulisboa/tecnico/cnv/solver/
 
 # Backup instrumented code
 cp -r pt/ulisboa/tecnico/cnv/solver/ ../cnv/instrumented/

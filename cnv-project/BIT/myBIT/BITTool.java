@@ -10,13 +10,17 @@ public class BITTool {
   private static final String fileSeparator = System.getProperty("file.separator");
   private static final String iPath = "pt/ulisboa/tecnico/cnv/server/WebServer";
 
-  private static final int I_MASK = 64;
-  private static final int BB_MASK = 32;
-  private static final int M_MASK = 16;
+  private static final int I_MASK = 1;
+  private static final int BB_MASK = 2;
+  private static final int M_MASK = 4;
   private static final int FL_MASK = 8;
-  private static final int FS_MASK = 4;
-  private static final int L_MASK = 2;
-  private static final int S_MASK = 1;
+  private static final int FS_MASK = 16;
+  private static final int L_MASK = 32;
+  private static final int S_MASK = 64;
+  private static final int N_MASK = 128;
+  private static final int NA_MASK = 256;
+  private static final int ANA_MASK = 512;
+  private static final int MANA_MASK = 1024;
 
 
   public static void main(String[] args) {
@@ -65,6 +69,14 @@ public class BITTool {
           doCountFieldLoads(instruction);
         else if (useMetric(iCode, FS_MASK) && opcode == InstructionTable.putfield)
           doCountFieldStores(instruction);
+        else if (useMetric(iCode, N_MASK) && opcode == InstructionTable.NEW)
+          doCountNews(instruction);
+        else if (useMetric(iCode, NA_MASK) && opcode == InstructionTable.newarray)
+          doCountNewArrays(instruction);
+        else if (useMetric(iCode, ANA_MASK) && opcode == InstructionTable.anewarray)
+          doCountANewArrays(instruction);
+        else if (useMetric(iCode, MANA_MASK) && opcode == InstructionTable.multianewarray)
+          doCountMultiANewArrays(instruction);
         else {
           short instructionType = InstructionTable.InstructionTypeTable[opcode];
 
@@ -109,5 +121,21 @@ public class BITTool {
 
   private static void doCountStores(Instruction instruction) {
     instruction.addBefore(iPath, "countStores", new Integer(1));
+  }
+
+  private static void doCountNews(Instruction instruction) {
+    instruction.addBefore(iPath, "countNews", new Integer(1));
+  }
+
+  private static void doCountNewArrays(Instruction instruction) {
+    instruction.addBefore(iPath, "countNewArrays", new Integer(1));
+  }
+
+  private static void doCountANewArrays(Instruction instruction) {
+    instruction.addBefore(iPath, "countANewArrays", new Integer(1));
+  }
+
+  private static void doCountMultiANewArrays(Instruction instruction) {
+    instruction.addBefore(iPath, "countMultiANewArrays", new Integer(1));
   }
 }
