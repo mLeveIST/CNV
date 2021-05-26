@@ -28,6 +28,7 @@ public class WebServer {
 
   private static Map<Long, Statistics> statistics;
 
+  static AmazonDynamoDB dynamoDB;
 
   public static void main(final String[] args) throws Exception {
 
@@ -144,7 +145,7 @@ public class WebServer {
 
         os.close();
 
-        try {
+        /*try {
           File file = new File("./statistics.txt");
 
           if (!file.exists()) {
@@ -171,8 +172,35 @@ public class WebServer {
 
         } catch (Exception e) {
           System.out.println("Error!!!!");
-        }
+        }*/
 
+        try {
+            String tableName = "ec2-stats";
+
+            Table table = dynamoDB.getTable(tableName);
+
+            final Statistics currStatistics = statistics.get(Thread.currentThread().getId());
+
+            Map<String, AttributeValue> item = newItem( , , , currStatistics.getBBCount());
+            PutItemRequest putItemRequest = new PutItemRequest(tableName, item);
+            PutItemResult putItemResult = dynamoDB.putItem(putItemRequest);
+            System.out.println("Result: " + putItemResult);*/
+
+        } catch (AmazonServiceException ase) {
+            System.out.println("Caught an AmazonServiceException, which means your request made it "
+                    + "to AWS, but was rejected with an error response for some reason.");
+            System.out.println("Error Message:    " + ase.getMessage());
+            System.out.println("HTTP Status Code: " + ase.getStatusCode());
+            System.out.println("AWS Error Code:   " + ase.getErrorCode());
+            System.out.println("Error Type:       " + ase.getErrorType());
+            System.out.println("Request ID:       " + ase.getRequestId());
+        } catch (AmazonClientException ace) {
+            System.out.println("Caught an AmazonClientException, which means the client encountered "
+                    + "a serious internal problem while trying to communicate with AWS, "
+                    + "such as not being able to access the network.");
+            System.out.println("Error Message: " + ace.getMessage());
+        }
+    }
         statistics.remove(Thread.currentThread().getId());
 
         System.out.println("> Sent response to " + t.getRemoteAddress().toString());
@@ -223,4 +251,35 @@ public class WebServer {
   public static synchronized void countMultiANewArrays(int toAdd) {
     statistics.get(Thread.currentThread().getId()).addMANACount();
   }
+
+  private static void initDB() throws Exception {
+    /*
+      * (~/.aws/credentials).
+      */
+    ProfileCredentialsProvider credentialsProvider = new ProfileCredentialsProvider();
+    try {
+        credentialsProvider.getCredentials();
+    } catch (Exception e) {
+        throw new AmazonClientException(
+                "Cannot load the credentials from the credential profiles file. " +
+                "Make sure that your credentials file is at the correct " +
+                "location (~/.aws/credentials).",
+                e);
+    }
+    dynamoDB = AmazonDynamoDBClientBuilder.standard()
+        .withCredentials(credentialsProvider)
+        .withRegion("us-east-1")
+        .build();
+  }
+
+  private static Map<String, AttributeValue> newItem(int id, int viewport, String map, int stat) {
+    Map<String, AttributeValue> item = new HashMap<String, AttributeValue>();
+    item.put("id", new AttributeValue().withN(Integer.toString(id)));
+    item.put("viewport", new AttributeValue().withN(Integer.toString(viewport)));
+    item.put("map", new AttributeValue(map));
+    item.put("stat", new AttributeValue().withN(Integer.toString(stat)));
+
+    return item;
+  }
+
 }
