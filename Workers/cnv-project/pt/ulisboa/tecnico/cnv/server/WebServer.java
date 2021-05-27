@@ -59,6 +59,10 @@ public class WebServer {
     public void handle(final HttpExchange t) throws IOException {
 
       final String query = t.getRequestURI().getQuery();
+      final String[] params = query.split("&");
+      final int x0, x1, y0, y1;
+
+      String strategy = null;
 
       if (query == null) {
         final String response = "ping";
@@ -76,7 +80,6 @@ public class WebServer {
 
         System.out.println("> Query:\t" + query);
 
-        final String[] params = query.split("&");
         final ArrayList<String> newArgs = new ArrayList<>();
 
         for (final String p : params) {
@@ -88,6 +91,18 @@ public class WebServer {
 
           newArgs.add("-" + splitParam[0]);
           newArgs.add(splitParam[1]);
+
+          if (splitParam[0].equals("s")) {
+            strategy = splitParam[1];
+          } else if (splitParam[0].equals("x0")) {
+            x0 = Integer.parseInt(splitParam[1]);
+          } else if (splitParam[0].equals("x1")) {
+            x1 = Integer.parseInt(splitParam[1]);
+          } else if (splitParam[0].equals("y0")) {
+            y0 = Integer.parseInt(splitParam[1]);
+          } else if (splitParam[0].equals("y1")) {
+            y1 = Integer.parseInt(splitParam[1]);
+          }
         }
 
         if (sap.isDebugging()) {
@@ -181,7 +196,7 @@ public class WebServer {
 
             final Statistics currStatistics = statistics.get(Thread.currentThread().getId());
 
-            Map<String, AttributeValue> item = newItem( , , , currStatistics.getBBCount());
+            Map<String, AttributeValue> item = newItem( , x1 - x0, y1 - y0,strategy, currStatistics.getBBCount());
             PutItemRequest putItemRequest = new PutItemRequest(tableName, item);
             PutItemResult putItemResult = dynamoDB.putItem(putItemRequest);
             System.out.println("Result: " + putItemResult);*/
@@ -272,11 +287,12 @@ public class WebServer {
         .build();
   }
 
-  private static Map<String, AttributeValue> newItem(int id, int viewport, String map, int stat) {
+  private static Map<String, AttributeValue> newItem(int id, int viewx, int viewy, String algorithm, int stat) {
     Map<String, AttributeValue> item = new HashMap<String, AttributeValue>();
     item.put("id", new AttributeValue().withN(Integer.toString(id)));
-    item.put("viewport", new AttributeValue().withN(Integer.toString(viewport)));
-    item.put("map", new AttributeValue(map));
+    item.put("viewx", new AttributeValue().withN(Integer.toString(viewx)));
+    item.put("viewy", new AttributeValue().withN(Integer.toString(viewy)));
+    item.put("algorithm", new AttributeValue(algorithm));
     item.put("stat", new AttributeValue().withN(Integer.toString(stat)));
 
     return item;
