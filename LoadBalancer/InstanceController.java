@@ -22,6 +22,10 @@ import com.amazonaws.services.dynamodbv2.AmazonDynamoDBClientBuilder;
 import com.amazonaws.services.ec2.AmazonEC2;
 import com.amazonaws.services.ec2.AmazonEC2ClientBuilder;
 import com.amazonaws.services.ec2.model.Instance;
+import com.amazonaws.services.dynamodbv2.model.ComparisonOperator;
+import com.amazonaws.services.dynamodbv2.model.Condition;
+import com.amazonaws.services.dynamodbv2.model.ScanRequest;
+import com.amazonaws.services.dynamodbv2.model.ScanResult;
 
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpHandler;
@@ -42,7 +46,7 @@ public class InstanceController {
         System.out.println("> Parsed server arguments...");
     }
 
-    // TODO : Merge Manuel and Ana
+    // TODO : Merge Manuel
     private static void initAWSServices() {
         AWSCredentials credentials = new ProfileCredentialsProvider().getCredentials();
 
@@ -209,7 +213,7 @@ public class InstanceController {
                 }
             }
 
-            int workloadLevel = getWorkloadLevel();
+            int workloadLevel = getWorkloadLevel(strategy, x1-x0, y1-y0);
             InstanceInfo instanceInfo = instanceToSendTo();
             instanceInfo.addPendingRequest(String.format("%d:%s", threadId, query), workloadLevel);
 
@@ -254,7 +258,64 @@ public class InstanceController {
         }
 
         // TODO : Merge Ana
-        private static int getWorkloadLevel() {
+        private static int getWorkloadLevel(String startegy, int xR, int yR) {
+            try {
+                String tableName = "ec2-stats";
+               
+                /* change parameters until a good range is achieved */
+                int var = 50;
+                int xRMax = xR + var;
+                int xRMin = xR - var;
+                int yRMax = yR + var;
+                int yRMin = yR - var;
+                
+                HashMap<String, Condition> scanFilter = new HashMap<String, Condition>();
+                Condition algorithm = new Condition()
+                    .withComparisonOperator(ComparisonOperator.EQ.toString())
+                    .withAttributeValueList(new AttributeValue(strategy));
+                scanFilter.put("algorithm", algorithm);
+                Condition xRange = new Condition()
+                    .withComparisonOperator(ComparisonOperator.BETWEEN.toString())
+                    .withAttributeValueList(new AttributeValue().withN("xRMin"), new AttributeValue().withN("xRMax"));
+                scanFilter.put("xRange", xRange);
+                Condition yRange = new Condition()
+                    .withComparisonOperator(ComparisonOperator.BETWEEN.toString())
+                    .withAttributeValueList(new AttributeValue().withN("yRMin"), new AttributeValue().withN("yRMax"));
+                scanFilter.put("yRange", yRange);
+
+                ScanRequest scanRequest = new ScanRequest(tableName).withScanFilter(scanFilter);
+                ScanResult scanResult = dynamoDB.scan(scanRequest);    
+
+            }  catch (AmazonServiceException ase) {
+                System.out.println("Caught an AmazonServiceException, which means your request made it "
+                        + "to AWS, but was rejected with an error response for some reason.");
+                System.out.println("Error Message:    " + ase.getMessage());
+                System.out.println("HTTP Status Code: " + ase.getStatusCode());
+                System.out.println("AWS Error Code:   " + ase.getErrorCode());
+                System.out.println("Error Type:       " + ase.getErrorType());
+                System.out.println("Request ID:       " + ase.getRequestId());
+            } catch (AmazonClientException ace) {
+                System.out.println("Caught an AmazonClientException, which means the client encountered "
+                        + "a serious internal problem while trying to communicate with AWS, "
+                        + "such as not being able to access the network.");
+                System.out.println("Error Message: " + ace.getMessage());
+            }  
+
+            
+            int results = scanResult.getCount();     
+
+            List<Integer> statistics = new ArrayList<Integer>();
+
+            for (Map<String, AttributeValue> item : scanResult.getItems()){
+                for (Map.Entry entry : item.entrySet()) {
+                    if (entry.getKey() == "stat") {
+                        statistics.add(Integer.parseInt(entry.getValue()));
+                    }
+                }
+            }
+
+            /* TODO: algorithm to calculate workload*/
+
             return 0;
         }
 

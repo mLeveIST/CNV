@@ -7,9 +7,24 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.Date;
+import java.util.Calendar;
 import java.util.*;
 
 import java.util.concurrent.Executors;
+
+import com.amazonaws.AmazonClientException;
+import com.amazonaws.AmazonServiceException;
+import com.amazonaws.auth.AWSCredentials;
+import com.amazonaws.auth.profile.ProfileCredentialsProvider;
+import com.amazonaws.regions.Region;
+import com.amazonaws.regions.Regions;
+import com.amazonaws.services.dynamodbv2.AmazonDynamoDB;
+import com.amazonaws.services.dynamodbv2.AmazonDynamoDBClientBuilder;
+import com.amazonaws.services.dynamodbv2.model.AttributeDefinition;
+import com.amazonaws.services.dynamodbv2.model.AttributeValue;
+import com.amazonaws.services.dynamodbv2.model.PutItemRequest;
+import com.amazonaws.services.dynamodbv2.model.PutItemResult;
 
 import com.sun.net.httpserver.Headers;
 import com.sun.net.httpserver.HttpExchange;
@@ -196,7 +211,11 @@ public class WebServer {
 
             final Statistics currStatistics = statistics.get(Thread.currentThread().getId());
 
-            Map<String, AttributeValue> item = newItem( , x1 - x0, y1 - y0,strategy, currStatistics.getBBCount());
+            Date date = new Date();
+            long diff = date.getTime();
+
+            /* change data in the last attribute if needed*/
+            Map<String, AttributeValue> item = newItem(diff, x1 - x0, y1 - y0, strategy, currStatistics.getBBCount());
             PutItemRequest putItemRequest = new PutItemRequest(tableName, item);
             PutItemResult putItemResult = dynamoDB.putItem(putItemRequest);
             System.out.println("Result: " + putItemResult);*/
@@ -287,9 +306,10 @@ public class WebServer {
         .build();
   }
 
-  private static Map<String, AttributeValue> newItem(int id, int viewx, int viewy, String algorithm, int stat) {
+  private static Map<String, AttributeValue> newItem(long id, int viewx, int viewy, String algorithm, int stat) {
     Map<String, AttributeValue> item = new HashMap<String, AttributeValue>();
-    item.put("id", new AttributeValue().withN(Integer.toString(id)));
+    String idS = String.ValueOf(id) + viewx + viewy;
+    item.put("id", new AttributeValue(idS));
     item.put("viewx", new AttributeValue().withN(Integer.toString(viewx)));
     item.put("viewy", new AttributeValue().withN(Integer.toString(viewy)));
     item.put("algorithm", new AttributeValue(algorithm));
