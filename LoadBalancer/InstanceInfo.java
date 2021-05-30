@@ -15,6 +15,7 @@ public class InstanceInfo {
     private Map<String, Integer> pendingRequestsWorkloads;
 
     private int failedPings;
+    private double cpuUsage;
     private boolean pendingTermination;
 
     public InstanceInfo(Instance instance) {
@@ -25,6 +26,7 @@ public class InstanceInfo {
         this.pendingRequestsWorkloads = new ConcurrentHashMap<>();
 
         this.failedPings = 0;
+        this.cpuUsage = 0.0;
         this.pendingTermination = false;
     }
 
@@ -41,6 +43,10 @@ public class InstanceInfo {
 
     public synchronized boolean isRunning() {
         return this.instance.getState().getName().equals("running");
+    }
+
+    public synchronized boolean isTerminated() {
+        return this.instance.getState().getName().equals("terminated");
     }
 
 
@@ -111,6 +117,17 @@ public class InstanceInfo {
 
     public synchronized boolean isUnhealthy() {
         return this.failedPings > MAX_FAILED_PINGS;
+    }
+
+
+    // CPU Usage
+
+    public double getCpuUsage() {
+        return this.cpuUsage;
+    }
+
+    public void setCpuUsage(double cpuUsage) {
+        this.cpuUsage = cpuUsage;
     }
 
 
