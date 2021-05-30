@@ -124,6 +124,7 @@ public class InstanceController {
         double instanceAverageCPU;
         int numDataPoints;
         InstanceInfo lowestInstance = null;
+        int numInstances = 0;
 
         if (instances.size() == 0)
             return;
@@ -133,9 +134,10 @@ public class InstanceController {
 
         for (InstanceInfo instance : instances.values()) {
 
-            if (!instance.isRunning())
+            if (!instance.isRunning() || instance.isPendingTermination())
                 continue;
 
+            numInstances++;
             instanceDimension.setValue(instance.getInstanceId());
 
             GetMetricStatisticsRequest request = new GetMetricStatisticsRequest()
@@ -180,11 +182,11 @@ public class InstanceController {
             }
         }
 
-        totalAverageCPU = totalAverageCPU / instances.size();
+        totalAverageCPU = totalAverageCPU / numInstances;
 
         if (totalAverageCPU >= 0.8) {
             createInstance();
-        } else if (instances.size() > 1 && totalAverageCPU <= 0.3 && lowestInstance != null) {
+        } else if (numInstances > 1 && totalAverageCPU <= 0.3 && lowestInstance != null) {
             System.out.println("> Flagging to Terminate instance " + lowestInstance.getInstanceId());
             lowestInstance.setPendingTermination();
             terminateInstance(lowestInstance);
