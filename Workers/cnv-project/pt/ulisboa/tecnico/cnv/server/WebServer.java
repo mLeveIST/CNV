@@ -186,14 +186,11 @@ public class WebServer {
 
         /*try {
           File file = new File("./statistics.txt");
-
           if (!file.exists()) {
             file.createNewFile();
           }
-
           final PrintWriter writer = new PrintWriter(new BufferedWriter(new FileWriter(file, true)));
           final Statistics currStatistics = statistics.get(Thread.currentThread().getId());
-
           writer.println(currStatistics.getQuery());
           writer.println("Method Calls: " + currStatistics.getMCount());
           writer.println("Basic Blocks Traced: " + currStatistics.getBBCount());
@@ -206,14 +203,13 @@ public class WebServer {
           writer.println("New Array Allocations: " + currStatistics.getNACount());
           writer.println("'A' New Array Allocations: " + currStatistics.getANACount());
           writer.println("Multi 'A' New Array Allocations: " + currStatistics.getMANACount());
-
           writer.close();
-
         } catch (Exception e) {
           System.out.println("Error!!!!");
         }*/
 
         try {
+            initDB();
             String tableName = "Requests_Info";
 
             Table table = dynamoDB.getTable(tableName);
@@ -314,7 +310,7 @@ public class WebServer {
     statistics.get(Thread.currentThread().getId()).addMANACount();
   }
 
-  private static void initDB() throws Exception {
+  private static void initDB(){
     /*
       * (~/.aws/credentials).
       */
