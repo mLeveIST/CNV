@@ -219,23 +219,23 @@ public class WebServer {
             int BBCount = currStatistics.getBBCount();
 
             int complexity;
-            if (BBCount <= 300) {
+            if (BBCount <= 30000) {
                 complexity = 1;
-            } else if (BBCount <= 500) {
+            } else if (BBCount <= 60000) {
                 complexity = 2;
-            } else if (BBCount <= 1000) {
+            } else if (BBCount <= 100000) {
                 complexity = 3;
-            } else if (BBCount <= 1500) {
+            } else if (BBCount <= 150000) {
                 complexity = 4;
-            } else if (BBCount <= 2000) {
+            } else if (BBCount <= 200000) {
                 complexity = 5;
-            } else if (BBCount <= 2500) {
+            } else if (BBCount <= 300000) {
                 complexity = 6;
-            } else if (BBCount <= 3000) {
+            } else if (BBCount <= 500000) {
                 complexity = 7;
-            } else if (BBCount <= 3500) {
+            } else if (BBCount <= 800000) {
                 complexity = 8;
-            } else if (BBCount <= 4000) {
+            } else if (BBCount <= 120000) {
                 complexity = 9;
             } else {
                 complexity = 10;
