@@ -193,7 +193,7 @@ public class InstanceController {
         }
     }
 
-    private static void terminateInstance(InstanceInfo instanceInfo) {
+    private static void terminateInstance(final InstanceInfo instanceInfo) {
         if (instanceInfo == null) {
             System.out.println("> ERROR : Instance to terminate is NULL");
             return;
@@ -367,16 +367,14 @@ public class InstanceController {
                     final InputStream in = connection.getInputStream();
                     final OutputStream os = t.getResponseBody();
 
-                    int size = 0;
+                    t.sendResponseHeaders(200, 0);
+
                     int readBytes;
                     byte[] buffer = new byte[4096];
 
                     while ((readBytes = in.read(buffer)) != -1) {
                         os.write(buffer, 0, readBytes);
-                        size += readBytes;
                     }
-
-                    t.sendResponseHeaders(200, size);
 
                     os.close();
                 }
