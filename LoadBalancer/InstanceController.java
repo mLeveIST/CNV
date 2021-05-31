@@ -194,7 +194,7 @@ public class InstanceController {
 
             if (totalAverageCPU >= 0.8) {
                 createInstance();
-            } else if (numInstances > 1 && totalAverageCPU <= 0.3 && lowestInstance != null) {
+            } else if (numInstances > 1 && totalAverageCPU <= 0.2 && lowestInstance != null) {
                 System.out.println("[AS] > Flagging to Terminate instance " + lowestInstance.getInstanceId());
                 lowestInstance.setPendingTermination();
                 terminateInstance(lowestInstance);
