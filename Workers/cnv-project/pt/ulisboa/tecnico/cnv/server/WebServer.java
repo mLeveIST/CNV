@@ -175,6 +175,8 @@ public class WebServer {
 
         os.close();
 
+        final Statistics currStatistics = statistics.get(Thread.currentThread().getId());
+
         /*try {
           File file = new File("./statistics.txt");
 
@@ -205,20 +207,40 @@ public class WebServer {
         }*/
 
         try {
-            String tableName = "ec2-stats";
+            String tableName = "Requests_Info";
 
             Table table = dynamoDB.getTable(tableName);
 
             final Statistics currStatistics = statistics.get(Thread.currentThread().getId());
+            
+            int BBCount = currStatistics.getBBCount();
 
-            Date date = new Date();
-            long diff = date.getTime();
+            if (BBCount <= 300) {
+                return 1;
+            } else if (BBCount <= 500) {
+                return 2;
+            } else if (BBCount <= 700) {
+                return 3;
+            } else if (BBCount <= 900) {
+                return 4;
+            } else if (BBCount <= 1200) {
+                return 5;
+            } else if (BBCount <= 1600) {
+                return 6;
+            } else if (BBCount <= 2000) {
+                return 7;
+            } else if (BBCount <= 2500) {
+                return 8;
+            } else if (BBCount <= 3000) {
+                return 9;
+            } else {
+                return 10;
+            }
 
-            /* change data in the last attribute if needed*/
-            Map<String, AttributeValue> item = newItem(diff, x1 - x0, y1 - y0, strategy, currStatistics.getBBCount());
+            Map<String, AttributeValue> item = newItem(strategy, (x1 - x0) * (y1 - y0), complexity);
             PutItemRequest putItemRequest = new PutItemRequest(tableName, item);
             PutItemResult putItemResult = dynamoDB.putItem(putItemRequest);
-            System.out.println("Result: " + putItemResult);*/
+            System.out.println("Result: " + putItemResult);
 
         } catch (AmazonServiceException ase) {
             System.out.println("Caught an AmazonServiceException, which means your request made it "
@@ -234,13 +256,14 @@ public class WebServer {
                     + "such as not being able to access the network.");
             System.out.println("Error Message: " + ace.getMessage());
         }
-    }
-        statistics.remove(Thread.currentThread().getId());
-
-        System.out.println("> Sent response to " + t.getRemoteAddress().toString());
       }
-    }
+    
+      statistics.remove(Thread.currentThread().getId());
+
+      System.out.println("> Sent response to " + t.getRemoteAddress().toString());
+    } 
   }
+  
 
   public static synchronized void countMethods(int toAdd) {
     statistics.get(Thread.currentThread().getId()).addMCount();
@@ -306,16 +329,12 @@ public class WebServer {
         .build();
   }
 
-  private static Map<String, AttributeValue> newItem(long id, int viewx, int viewy, String algorithm, int stat) {
+  private static Map<String, AttributeValue> newItem(String algorithm, int area, int complexity) {
     Map<String, AttributeValue> item = new HashMap<String, AttributeValue>();
-    String idS = String.ValueOf(id) + viewx + viewy;
-    item.put("id", new AttributeValue(idS));
-    item.put("viewx", new AttributeValue().withN(Integer.toString(viewx)));
-    item.put("viewy", new AttributeValue().withN(Integer.toString(viewy)));
-    item.put("algorithm", new AttributeValue(algorithm));
-    item.put("stat", new AttributeValue().withN(Integer.toString(stat)));
+    item.put("Strategy", new AttributeValue(algorithm));
+    item.put("Area", new AttributeValue().withN(Integer.toString(area)));
+    item.put("Complexity", new AttributeValue(complexity));
 
     return item;
   }
-
 }
