@@ -21,7 +21,6 @@ import com.amazonaws.services.cloudwatch.AmazonCloudWatchClientBuilder;
 import com.amazonaws.services.cloudwatch.model.Datapoint;
 import com.amazonaws.services.cloudwatch.model.Dimension;
 import com.amazonaws.services.cloudwatch.model.GetMetricStatisticsRequest;
-import com.amazonaws.services.dynamodbv2.AmazonDynamoDB;
 import com.amazonaws.services.dynamodbv2.AmazonDynamoDBClientBuilder;
 import com.amazonaws.services.dynamodbv2.document.*;
 import com.amazonaws.services.dynamodbv2.document.spec.QuerySpec;
@@ -128,7 +127,6 @@ public class InstanceController {
         }
     }
 
-    // NOTE : Changed to only terminate max 1 instance per call
     private static void checkCPUUsage() throws InterruptedException {
         double totalAverageCPU = 0.0;
         double instanceAverageCPU;
@@ -166,7 +164,7 @@ public class InstanceController {
 
             for (Datapoint dp : dataPoints) {
                 System.out.println(
-                        "> CPU utilization for instance " + instance.getInstanceId() +
+                        "[AS] > CPU utilization for instance " + instance.getInstanceId() +
                         " = " + dp.getAverage() +
                         "\nTimestamp: " + dp.getTimestamp() +
                         "\nMax: " + dp.getMaximum() +
@@ -186,20 +184,21 @@ public class InstanceController {
             totalAverageCPU += instanceAverageCPU;
             instance.setCpuUsage(instanceAverageCPU);
 
-            // TODO : Can also check for instance with least requests or least workload
             if (lowestInstance == null || lowestInstance.getCpuUsage() > instanceAverageCPU) {
                 lowestInstance = instance;
             }
         }
 
-        totalAverageCPU = totalAverageCPU / numInstances;
+        if (numInstances != 0) {
+            totalAverageCPU = totalAverageCPU / numInstances;
 
-        if (totalAverageCPU >= 0.8) {
-            createInstance();
-        } else if (numInstances > 1 && totalAverageCPU <= 0.3 && lowestInstance != null) {
-            System.out.println("[AS] > Flagging to Terminate instance " + lowestInstance.getInstanceId());
-            lowestInstance.setPendingTermination();
-            terminateInstance(lowestInstance);
+            if (totalAverageCPU >= 0.8) {
+                createInstance();
+            } else if (numInstances > 1 && totalAverageCPU <= 0.3 && lowestInstance != null) {
+                System.out.println("[AS] > Flagging to Terminate instance " + lowestInstance.getInstanceId());
+                lowestInstance.setPendingTermination();
+                terminateInstance(lowestInstance);
+            }
         }
     }
 
