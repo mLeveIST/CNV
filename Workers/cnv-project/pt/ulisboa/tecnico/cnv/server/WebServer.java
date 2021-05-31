@@ -7,9 +7,29 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.Date;
+import java.util.Calendar;
 import java.util.*;
 
 import java.util.concurrent.Executors;
+
+import com.amazonaws.AmazonClientException;
+import com.amazonaws.AmazonServiceException;
+import com.amazonaws.auth.AWSCredentials;
+import com.amazonaws.auth.AWSStaticCredentialsProvider;
+import com.amazonaws.auth.profile.ProfileCredentialsProvider;
+import com.amazonaws.regions.Region;
+import com.amazonaws.regions.Regions;
+import com.amazonaws.services.dynamodbv2.AmazonDynamoDB;
+import com.amazonaws.services.dynamodbv2.AmazonDynamoDBClientBuilder;
+import com.amazonaws.services.dynamodbv2.document.DynamoDB;
+import com.amazonaws.services.dynamodbv2.document.Item;
+import com.amazonaws.services.dynamodbv2.document.Table;
+import com.amazonaws.services.dynamodbv2.document.TableCollection;
+import com.amazonaws.services.dynamodbv2.document.utils.ValueMap;
+import com.amazonaws.services.dynamodbv2.model.AttributeDefinition;
+import com.amazonaws.services.dynamodbv2.model.AttributeValue;
+
 
 import com.sun.net.httpserver.Headers;
 import com.sun.net.httpserver.HttpExchange;
@@ -28,6 +48,7 @@ public class WebServer {
 
   private static Map<Long, Statistics> statistics;
 
+  private static DynamoDB dynamoDB;
 
   public static void main(final String[] args) throws Exception {
 
@@ -58,6 +79,14 @@ public class WebServer {
     public void handle(final HttpExchange t) throws IOException {
 
       final String query = t.getRequestURI().getQuery();
+      final String[] params = query.split("&");
+      
+      int x0 = 0;
+      int x1 = 0;
+      int y0 = 0;
+      int y1 = 0;
+
+      String strategy = null;
 
       if (query == null) {
         final String response = "ping";
@@ -75,7 +104,6 @@ public class WebServer {
 
         System.out.println("> Query:\t" + query);
 
-        final String[] params = query.split("&");
         final ArrayList<String> newArgs = new ArrayList<>();
 
         for (final String p : params) {
@@ -87,6 +115,18 @@ public class WebServer {
 
           newArgs.add("-" + splitParam[0]);
           newArgs.add(splitParam[1]);
+
+          if (splitParam[0].equals("s")) {
+            strategy = splitParam[1];
+          } else if (splitParam[0].equals("x0")) {
+            x0 = Integer.parseInt(splitParam[1]);
+          } else if (splitParam[0].equals("x1")) {
+            x1 = Integer.parseInt(splitParam[1]);
+          } else if (splitParam[0].equals("y0")) {
+            y0 = Integer.parseInt(splitParam[1]);
+          } else if (splitParam[0].equals("y1")) {
+            y1 = Integer.parseInt(splitParam[1]);
+          }
         }
 
         if (sap.isDebugging()) {
@@ -144,16 +184,13 @@ public class WebServer {
 
         os.close();
 
-        try {
+        /*try {
           File file = new File("./statistics.txt");
-
           if (!file.exists()) {
             file.createNewFile();
           }
-
           final PrintWriter writer = new PrintWriter(new BufferedWriter(new FileWriter(file, true)));
           final Statistics currStatistics = statistics.get(Thread.currentThread().getId());
-
           writer.println(currStatistics.getQuery());
           writer.println("Method Calls: " + currStatistics.getMCount());
           writer.println("Basic Blocks Traced: " + currStatistics.getBBCount());
@@ -166,19 +203,68 @@ public class WebServer {
           writer.println("New Array Allocations: " + currStatistics.getNACount());
           writer.println("'A' New Array Allocations: " + currStatistics.getANACount());
           writer.println("Multi 'A' New Array Allocations: " + currStatistics.getMANACount());
-
           writer.close();
-
         } catch (Exception e) {
           System.out.println("Error!!!!");
+        }*/
+
+        try {
+            initDB();
+            String tableName = "Requests_Info";
+
+            Table table = dynamoDB.getTable(tableName);
+
+            final Statistics currStatistics = statistics.get(Thread.currentThread().getId());
+            
+            int BBCount = currStatistics.getBBCount();
+
+            int complexity;
+            if (BBCount <= 300) {
+                complexity = 1;
+            } else if (BBCount <= 500) {
+                complexity = 2;
+            } else if (BBCount <= 1000) {
+                complexity = 3;
+            } else if (BBCount <= 1500) {
+                complexity = 4;
+            } else if (BBCount <= 2000) {
+                complexity = 5;
+            } else if (BBCount <= 2500) {
+                complexity = 6;
+            } else if (BBCount <= 3000) {
+                complexity = 7;
+            } else if (BBCount <= 3500) {
+                complexity = 8;
+            } else if (BBCount <= 4000) {
+                complexity = 9;
+            } else {
+                complexity = 10;
+            }
+            
+            Item item = newItem(strategy, (x1 - x0) * (y1 - y0), complexity);
+            table.putItem(item);
+        } catch (AmazonServiceException ase) {
+            System.out.println("Caught an AmazonServiceException, which means your request made it "
+                    + "to AWS, but was rejected with an error response for some reason.");
+            System.out.println("Error Message:    " + ase.getMessage());
+            System.out.println("HTTP Status Code: " + ase.getStatusCode());
+            System.out.println("AWS Error Code:   " + ase.getErrorCode());
+            System.out.println("Error Type:       " + ase.getErrorType());
+            System.out.println("Request ID:       " + ase.getRequestId());
+        } catch (AmazonClientException ace) {
+            System.out.println("Caught an AmazonClientException, which means the client encountered "
+                    + "a serious internal problem while trying to communicate with AWS, "
+                    + "such as not being able to access the network.");
+            System.out.println("Error Message: " + ace.getMessage());
         }
-
-        statistics.remove(Thread.currentThread().getId());
-
-        System.out.println("> Sent response to " + t.getRemoteAddress().toString());
       }
-    }
+    
+      statistics.remove(Thread.currentThread().getId());
+
+      System.out.println("> Sent response to " + t.getRemoteAddress().toString());
+    } 
   }
+  
 
   public static synchronized void countMethods(int toAdd) {
     statistics.get(Thread.currentThread().getId()).addMCount();
@@ -222,5 +308,27 @@ public class WebServer {
 
   public static synchronized void countMultiANewArrays(int toAdd) {
     statistics.get(Thread.currentThread().getId()).addMANACount();
+  }
+
+  private static void initDB(){
+    /*
+      * (~/.aws/credentials).
+      */
+    AWSCredentials credentials = new ProfileCredentialsProvider().getCredentials();
+
+    dynamoDB = new DynamoDB(AmazonDynamoDBClientBuilder.standard()
+                .withCredentials(new AWSStaticCredentialsProvider(credentials))
+                .withRegion("us-east-1")
+                .build());
+  }
+
+  private static Item newItem(String algorithm, int area, int complexity) {
+    Item item = new Item()
+            .withString("Strategy", algorithm)
+            .withInt("Area", area)
+            .withInt("Complexity", complexity)
+            ;
+
+    return item;
   }
 }
