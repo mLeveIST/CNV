@@ -16,15 +16,20 @@ import java.util.concurrent.Executors;
 import com.amazonaws.AmazonClientException;
 import com.amazonaws.AmazonServiceException;
 import com.amazonaws.auth.AWSCredentials;
+import com.amazonaws.auth.AWSStaticCredentialsProvider;
 import com.amazonaws.auth.profile.ProfileCredentialsProvider;
 import com.amazonaws.regions.Region;
 import com.amazonaws.regions.Regions;
 import com.amazonaws.services.dynamodbv2.AmazonDynamoDB;
 import com.amazonaws.services.dynamodbv2.AmazonDynamoDBClientBuilder;
+import com.amazonaws.services.dynamodbv2.document.DynamoDB;
+import com.amazonaws.services.dynamodbv2.document.Item;
+import com.amazonaws.services.dynamodbv2.document.Table;
+import com.amazonaws.services.dynamodbv2.document.TableCollection;
+import com.amazonaws.services.dynamodbv2.document.utils.ValueMap;
 import com.amazonaws.services.dynamodbv2.model.AttributeDefinition;
 import com.amazonaws.services.dynamodbv2.model.AttributeValue;
-import com.amazonaws.services.dynamodbv2.model.PutItemRequest;
-import com.amazonaws.services.dynamodbv2.model.PutItemResult;
+
 
 import com.sun.net.httpserver.Headers;
 import com.sun.net.httpserver.HttpExchange;
@@ -43,7 +48,7 @@ public class WebServer {
 
   private static Map<Long, Statistics> statistics;
 
-  static AmazonDynamoDB dynamoDB;
+  private static DynamoDB dynamoDB;
 
   public static void main(final String[] args) throws Exception {
 
@@ -75,7 +80,11 @@ public class WebServer {
 
       final String query = t.getRequestURI().getQuery();
       final String[] params = query.split("&");
-      final int x0, x1, y0, y1;
+      
+      int x0 = 0;
+      int x1 = 0;
+      int y0 = 0;
+      int y1 = 0;
 
       String strategy = null;
 
@@ -175,8 +184,6 @@ public class WebServer {
 
         os.close();
 
-        final Statistics currStatistics = statistics.get(Thread.currentThread().getId());
-
         /*try {
           File file = new File("./statistics.txt");
 
@@ -215,33 +222,31 @@ public class WebServer {
             
             int BBCount = currStatistics.getBBCount();
 
+            int complexity;
             if (BBCount <= 300) {
-                return 1;
+                complexity = 1;
             } else if (BBCount <= 500) {
-                return 2;
-            } else if (BBCount <= 700) {
-                return 3;
-            } else if (BBCount <= 900) {
-                return 4;
-            } else if (BBCount <= 1200) {
-                return 5;
-            } else if (BBCount <= 1600) {
-                return 6;
+                complexity = 2;
+            } else if (BBCount <= 1000) {
+                complexity = 3;
+            } else if (BBCount <= 1500) {
+                complexity = 4;
             } else if (BBCount <= 2000) {
-                return 7;
+                complexity = 5;
             } else if (BBCount <= 2500) {
-                return 8;
+                complexity = 6;
             } else if (BBCount <= 3000) {
-                return 9;
+                complexity = 7;
+            } else if (BBCount <= 3500) {
+                complexity = 8;
+            } else if (BBCount <= 4000) {
+                complexity = 9;
             } else {
-                return 10;
+                complexity = 10;
             }
-
-            Map<String, AttributeValue> item = newItem(strategy, (x1 - x0) * (y1 - y0), complexity);
-            PutItemRequest putItemRequest = new PutItemRequest(tableName, item);
-            PutItemResult putItemResult = dynamoDB.putItem(putItemRequest);
-            System.out.println("Result: " + putItemResult);
-
+            
+            Item item = newItem(strategy, (x1 - x0) * (y1 - y0), complexity);
+            table.putItem(item);
         } catch (AmazonServiceException ase) {
             System.out.println("Caught an AmazonServiceException, which means your request made it "
                     + "to AWS, but was rejected with an error response for some reason.");
@@ -313,27 +318,20 @@ public class WebServer {
     /*
       * (~/.aws/credentials).
       */
-    ProfileCredentialsProvider credentialsProvider = new ProfileCredentialsProvider();
-    try {
-        credentialsProvider.getCredentials();
-    } catch (Exception e) {
-        throw new AmazonClientException(
-                "Cannot load the credentials from the credential profiles file. " +
-                "Make sure that your credentials file is at the correct " +
-                "location (~/.aws/credentials).",
-                e);
-    }
-    dynamoDB = AmazonDynamoDBClientBuilder.standard()
-        .withCredentials(credentialsProvider)
-        .withRegion("us-east-1")
-        .build();
+    AWSCredentials credentials = new ProfileCredentialsProvider().getCredentials();
+
+    dynamoDB = new DynamoDB(AmazonDynamoDBClientBuilder.standard()
+                .withCredentials(new AWSStaticCredentialsProvider(credentials))
+                .withRegion("us-east-1")
+                .build());
   }
 
-  private static Map<String, AttributeValue> newItem(String algorithm, int area, int complexity) {
-    Map<String, AttributeValue> item = new HashMap<String, AttributeValue>();
-    item.put("Strategy", new AttributeValue(algorithm));
-    item.put("Area", new AttributeValue().withN(Integer.toString(area)));
-    item.put("Complexity", new AttributeValue(complexity));
+  private static Item newItem(String algorithm, int area, int complexity) {
+    Item item = new Item()
+            .withString("Strategy", algorithm)
+            .withInt("Area", area)
+            .withInt("Complexity", complexity)
+            ;
 
     return item;
   }
