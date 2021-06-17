@@ -1,16 +1,13 @@
 package pt.ulisboa.tecnico.cnv.controller;
 
-import com.amazonaws.services.ec2.model.Instance;
-
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 public class InstanceInfo {
-    private static final int MAX_FAILED_PINGS = 2;
+    private static final int MAX_FAILED_PINGS = 3;
 
-    private final Instance instance;
     private final String instanceId;
-    private final String instanceIp;
+    private String instanceIp;
 
     private Map<String, Integer> pendingRequestsWorkloads;
 
@@ -18,35 +15,15 @@ public class InstanceInfo {
     private double cpuUsage;
     private boolean pendingTermination;
 
-    public InstanceInfo(Instance instance) {
-        this.instance = instance;
-        this.instanceId = instance.getInstanceId();
-        this.instanceIp = instance.getPrivateIpAddress();
+    public InstanceInfo(String instanceId, String instanceIp) {
+        this.instanceId = instanceId;
+        this.instanceIp = instanceIp;
 
         this.pendingRequestsWorkloads = new ConcurrentHashMap<>();
 
         this.failedPings = 0;
         this.cpuUsage = 0.0;
         this.pendingTermination = false;
-    }
-
-
-    // AWS Instance
-
-    public synchronized Instance getInstance() {
-        return this.instance;
-    }
-
-    public synchronized String getInstanceState() {
-        return this.instance.getState().getName();
-    }
-
-    public synchronized boolean isRunning() {
-        return this.instance.getState().getName().equals("running");
-    }
-
-    public synchronized boolean isTerminated() {
-        return this.instance.getState().getName().equals("terminated");
     }
 
 

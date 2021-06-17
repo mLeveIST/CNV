@@ -34,6 +34,8 @@ import javax.imageio.ImageIO;
 
 public class WebServer {
 
+    private static final String TABLE_NAME = "Requests_Info";
+
     static ServerArgumentParser sap = null;
 
     private static Map<Long, Statistics> statistics;
@@ -50,9 +52,13 @@ public class WebServer {
             return;
         }
 
+        System.out.println("> Finished parsing Server args.");
+
+        initDB();
+
         statistics = new ConcurrentHashMap<>();
 
-        System.out.println("> Finished parsing Server args.");
+        System.out.println("> Finished initializing DB access.");
 
         final HttpServer server = HttpServer.create(new InetSocketAddress(WebServer.sap.getServerAddress(), WebServer.sap.getServerPort()), 0);
 
@@ -61,6 +67,22 @@ public class WebServer {
         server.start();
 
         System.out.println(server.getAddress().toString());
+    }
+
+    private static void initDB(){
+        AWSCredentials credentials = new ProfileCredentialsProvider().getCredentials();
+
+        dynamoDB = new DynamoDB(AmazonDynamoDBClientBuilder.standard()
+                .withCredentials(DefaultAWSCredentialsProviderChain.getInstance())
+                .withRegion("us-east-1")
+                .build());
+    }
+
+    private static Item newItem(String algorithm, int area, int complexity) {
+
+        return new Item()
+                .withPrimaryKey("Strategy", algorithm, "Area", area)
+                .withInt("Complexity", complexity);
     }
 
     static class MyHandler implements HttpHandler {
@@ -206,39 +228,11 @@ public class WebServer {
                 }
 
                 try {
-                    initDB();
-                    String tableName = "Requests_Info";
-
-                    Table table = dynamoDB.getTable(tableName);
+                    Table table = dynamoDB.getTable(TABLE_NAME);
 
                     final Statistics currStatistics = statistics.get(Thread.currentThread().getId());
 
-                    int BBCount = currStatistics.getBBCount();
-
-                    int complexity;
-                    if (BBCount <= 300) {
-                        complexity = 1;
-                    } else if (BBCount <= 500) {
-                        complexity = 2;
-                    } else if (BBCount <= 1000) {
-                        complexity = 3;
-                    } else if (BBCount <= 1500) {
-                        complexity = 4;
-                    } else if (BBCount <= 2000) {
-                        complexity = 5;
-                    } else if (BBCount <= 2500) {
-                        complexity = 6;
-                    } else if (BBCount <= 3000) {
-                        complexity = 7;
-                    } else if (BBCount <= 3500) {
-                        complexity = 8;
-                    } else if (BBCount <= 4000) {
-                        complexity = 9;
-                    } else {
-                        complexity = 10;
-                    }
-
-                    Item item = newItem(strategy, (x1 - x0) * (y1 - y0), complexity);
+                    Item item = newItem(strategy, (x1 - x0) * (y1 - y0), currStatistics.getBBCount());
                     table.putItem(item);
 
                 } catch (AmazonServiceException ase) {
@@ -306,22 +300,5 @@ public class WebServer {
 
     public static synchronized void countMultiANewArrays(int toAdd) {
         statistics.get(Thread.currentThread().getId()).addMANACount();
-    }
-
-    private static void initDB(){
-        AWSCredentials credentials = new ProfileCredentialsProvider().getCredentials();
-
-        dynamoDB = new DynamoDB(AmazonDynamoDBClientBuilder.standard()
-                .withCredentials(new AWSStaticCredentialsProvider(credentials))
-                .withRegion("us-east-1")
-                .build());
-    }
-
-    private static Item newItem(String algorithm, int area, int complexity) {
-
-        return new Item()
-                .withString("Strategy", algorithm)
-                .withInt("Area", area)
-                .withInt("Complexity", complexity);
     }
 }

@@ -7,9 +7,7 @@ import java.io.OutputStream;
 import java.net.*;
 
 import java.util.*;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.Executors;
-import java.util.concurrent.TimeUnit;
+import java.util.concurrent.*;
 
 import com.amazonaws.AmazonClientException;
 import com.amazonaws.AmazonServiceException;
@@ -36,6 +34,7 @@ import com.sun.net.httpserver.HttpServer;
 public class InstanceController {
     private static final int MIN_INSTANCES = 1;
     private static final int MAX_INSTANCES = 10;
+    private static final int BURST_MIN_SIZE = 5;
     private static final String TABLE_NAME = "Requests_Info";
 
     private static final String GRID_SCAN = "GRID_SCAN";
@@ -49,6 +48,7 @@ public class InstanceController {
     private static AmazonEC2 ec2;
 
     private static Map<String, InstanceInfo> instances;
+    private static ThreadPoolExecutor threadPoolExecutor;
 
 
     private static void initControllerServices(String[] args) {
@@ -83,41 +83,84 @@ public class InstanceController {
         Executors.newScheduledThreadPool(1).scheduleWithFixedDelay(new Runnable() {
             @Override
             public void run() {
+                if (threadPoolExecutor != null && threadPoolExecutor.getQueue().size() >= BURST_MIN_SIZE) {
+                    try {
+                        createInstance();
+                    } catch (InterruptedException e) {
+                        e.printStackTrace();
+                    }
+                }
+            }
+        }, 120, 1, TimeUnit.SECONDS);
+
+        Executors.newScheduledThreadPool(1).scheduleWithFixedDelay(new Runnable() {
+            @Override
+            public void run() {
                 try {
                     checkCPUUsage();
                 } catch (InterruptedException e) {
                     e.printStackTrace();
                 }
             }
-        }, 60, 60, TimeUnit.SECONDS);
+        }, 120, 60, TimeUnit.SECONDS);
+
+        Executors.newScheduledThreadPool(1).scheduleWithFixedDelay(new Runnable() {
+            @Override
+            public void run() {
+
+                for (InstanceInfo instance : instances.values()) {
+                    if (!instance.isPendingTermination()) {
+                        continue;
+                    }
+
+                    if (instances.size() <= MIN_INSTANCES) {
+                        System.out.println("[AST] > NOTICE : Sole instance flagged to terminate, creating new one");
+
+                        new Thread(new Runnable() {
+                            @Override
+                            public void run() {
+                                try {
+                                    createInstance();
+                                } catch (InterruptedException e) {
+                                    e.printStackTrace();
+                                }
+                            }
+                        }).start();
+                    }
+
+                    terminateInstance(instance);
+                }
+            }
+        }, 120, 20, TimeUnit.SECONDS);
     }
 
     private static void createInstance() throws InterruptedException {
         try {
             RunInstancesRequest runInstancesRequest = new RunInstancesRequest();
 
-            runInstancesRequest.withImageId("TODO_IN_AWS")
+            runInstancesRequest.withImageId("ami-0b2ed5c67c334aeca")
                     .withInstanceType("t2.micro")
-                    .withMinCount(MIN_INSTANCES)
-                    .withMaxCount(MIN_INSTANCES)
+                    .withMinCount(1)
+                    .withMaxCount(1)
                     .withKeyName("CNV-Lab-AWS")
-                    .withSecurityGroups("TODO_IN_AWS")
+                    .withSecurityGroups("CNV-SSH-HTTP")
                     .withMonitoring(true);
 
             RunInstancesResult runInstancesResult = ec2.runInstances(runInstancesRequest);
-
             Instance instance = runInstancesResult.getReservation().getInstances().get(0);
 
-            System.out.println("[AS] > Created instance with ID " + instance.getInstanceId());
+            String instanceId = instance.getInstanceId();
 
-            while (!instance.getState().getName().equals("running")) {
-                System.out.println("[AS] > Waiting for instance with ID " + instance.getInstanceId());
-                Thread.sleep(2000);
+            System.out.println("[AS] > Created instance with ID " + instanceId);
+
+            while (!isInstanceRunning(instanceId)) {
+                System.out.println("[AS] > Waiting for instance with ID " + instanceId);
+                Thread.sleep(10000);
             }
 
             System.out.println("[AS] > Running instance with ID " + instance.getInstanceId());
 
-            instances.put(instance.getInstanceId(), new InstanceInfo(instance));
+            instances.put(instanceId, new InstanceInfo(instanceId, getInstanceIp(instanceId)));
 
         } catch (AmazonServiceException ase) {
             System.out.println("Caught Exception: " + ase.getMessage());
@@ -125,6 +168,50 @@ public class InstanceController {
             System.out.println("Error Code: " + ase.getErrorCode());
             System.out.println("Request ID: " + ase.getRequestId());
         }
+    }
+
+    private synchronized static String getInstanceIp(String instanceId) {
+        DescribeInstancesResult describeInstancesResult = ec2.describeInstances();
+        List<Reservation> reservations = describeInstancesResult.getReservations();
+        Set<Instance> instances = new HashSet<>();
+
+        for (Reservation reservation : reservations) {
+            instances.addAll(reservation.getInstances());
+        }
+
+        for (Instance instance : instances) {
+            if (instance.getInstanceId().equals(instanceId)) {
+                return instance.getPublicDnsName();
+            }
+        }
+
+        System.out.println("[AS] > WARNING: Could not get DNS name for instance with ID " + instanceId);
+
+        return "";
+    }
+
+    private synchronized static boolean isInstanceRunning(String instanceId) {
+        DescribeInstanceStatusResult describeInstanceStatusResult = ec2.describeInstanceStatus(new DescribeInstanceStatusRequest()
+                .withInstanceIds(instanceId)
+                .withIncludeAllInstances(true));
+
+        if (describeInstanceStatusResult.getInstanceStatuses().size() == 0) {
+            return false;
+        }
+
+        return describeInstanceStatusResult.getInstanceStatuses().get(0).getInstanceState().getName().equals("running");
+    }
+
+    private synchronized static boolean isInstanceTerminated(String instanceId) {
+        DescribeInstanceStatusResult describeInstanceStatusResult = ec2.describeInstanceStatus(new DescribeInstanceStatusRequest()
+                .withInstanceIds(instanceId)
+                .withIncludeAllInstances(true));
+
+        if (describeInstanceStatusResult.getInstanceStatuses().size() == 0) {
+            return false;
+        }
+
+        return describeInstanceStatusResult.getInstanceStatuses().get(0).getInstanceState().getName().equals("terminated");
     }
 
     private static void checkCPUUsage() throws InterruptedException {
@@ -137,25 +224,30 @@ public class InstanceController {
         if (instances.size() == 0)
             return;
 
+        System.out.println("[AS] > Checking CPU usage of instances");
+
         Dimension instanceDimension = new Dimension();
         instanceDimension.setName("InstanceId");
 
         for (InstanceInfo instance : instances.values()) {
 
-            if (!instance.isRunning() || instance.isPendingTermination())
+            if (!isInstanceRunning(instance.getInstanceId()) || instance.isPendingTermination())
                 continue;
 
             numInstances++;
             instanceDimension.setValue(instance.getInstanceId());
 
+            long endTime = System.currentTimeMillis();
+            long startTime = endTime - 120000;
+
             GetMetricStatisticsRequest request = new GetMetricStatisticsRequest()
-                    .withStartTime(new Date(new Date().getTime() - 60000))
+                    .withStartTime(new Date(startTime))
                     .withNamespace("AWS/EC2")
                     .withPeriod(60)
                     .withMetricName("CPUUtilization")
                     .withStatistics("Average")
                     .withDimensions(instanceDimension)
-                    .withEndTime(new Date());
+                    .withEndTime(new Date(endTime));
 
             List<Datapoint> dataPoints = cloudWatch.getMetricStatistics(request).getDatapoints();
 
@@ -163,20 +255,14 @@ public class InstanceController {
             numDataPoints = 0;
 
             for (Datapoint dp : dataPoints) {
-                System.out.println(
-                        "[AS] > CPU utilization for instance " + instance.getInstanceId() +
-                        " = " + dp.getAverage() +
-                        "\nTimestamp: " + dp.getTimestamp() +
-                        "\nMax: " + dp.getMaximum() +
-                        "\nSampleCount: " + dp.getSampleCount() +
-                        "\nUnit: " + dp.getUnit());
+                System.out.println("[AS] > CPU utilization for instance " + instance.getInstanceId() + " = " + dp.getAverage());
 
                 instanceAverageCPU += dp.getAverage();
                 numDataPoints++;
             }
 
             if (numDataPoints == 0) {
-                System.out.println("[AS] > WARNING : No data points for instance " + instance.getInstanceId());
+                System.out.println("[AS] > NOTICE : No data points for instance " + instance.getInstanceId());
                 continue;
             }
 
@@ -192,12 +278,13 @@ public class InstanceController {
         if (numInstances != 0) {
             totalAverageCPU = totalAverageCPU / numInstances;
 
-            if (totalAverageCPU >= 0.8) {
+            System.out.println("[AS] > Total CPU Average = " + totalAverageCPU);
+
+            if (totalAverageCPU >= 80.0) {
                 createInstance();
-            } else if (numInstances > 1 && totalAverageCPU <= 0.2 && lowestInstance != null) {
+            } else if (numInstances > 1 && totalAverageCPU <= 20.0 && lowestInstance != null) {
                 System.out.println("[AS] > Flagging to Terminate instance " + lowestInstance.getInstanceId());
                 lowestInstance.setPendingTermination();
-                terminateInstance(lowestInstance);
             }
         }
     }
@@ -208,40 +295,35 @@ public class InstanceController {
             return;
         }
 
-        new Thread(new Runnable() {
-            @Override
-            public void run() {
-                try {
-                    while (instanceInfo.getNumberOfPendingRequests() != 0) {
-                        System.out.println("[AST] > Waiting for requests on instance " + instanceInfo.getInstanceId());
-                        Thread.sleep(5000);
-                    }
-
-                    System.out.println("[AST] > Terminating instance " + instanceInfo.getInstanceId());
-
-                    TerminateInstancesRequest termInstanceReq = new TerminateInstancesRequest();
-                    termInstanceReq.withInstanceIds(instanceInfo.getInstanceId());
-                    ec2.terminateInstances(termInstanceReq);
-
-                    while (!instanceInfo.isTerminated()) {
-                        System.out.println("[AST] > Waiting for termination of instance " + instanceInfo.getInstanceId());
-                        Thread.sleep(5000);
-                    }
-
-                    System.out.println("[AST] > Instance " + instanceInfo.getInstanceId() + " terminated");
-
-                    instances.remove(instanceInfo.getInstanceId());
-
-                } catch (InterruptedException ie) {
-                    ie.printStackTrace();
-                } catch (AmazonServiceException ase) {
-                    System.out.println("Caught Exception: " + ase.getMessage());
-                    System.out.println("Response Status Code: " + ase.getStatusCode());
-                    System.out.println("Error Code: " + ase.getErrorCode());
-                    System.out.println("Request ID: " + ase.getRequestId());
-                }
+        try {
+            while (instanceInfo.getNumberOfPendingRequests() != 0) {
+                System.out.println("[AST] > Waiting for requests on instance " + instanceInfo.getInstanceId() + " to finish");
+                Thread.sleep(10000);
             }
-        }).start();
+
+            System.out.println("[AST] > Terminating instance " + instanceInfo.getInstanceId());
+
+            TerminateInstancesRequest termInstanceReq = new TerminateInstancesRequest();
+            termInstanceReq.withInstanceIds(instanceInfo.getInstanceId());
+            ec2.terminateInstances(termInstanceReq);
+
+            while (!isInstanceTerminated(instanceInfo.getInstanceId())) {
+                System.out.println("[AST] > Waiting for termination of instance " + instanceInfo.getInstanceId());
+                Thread.sleep(10000);
+            }
+
+            System.out.println("[AST] > Instance " + instanceInfo.getInstanceId() + " terminated");
+
+            instances.remove(instanceInfo.getInstanceId());
+
+        } catch (InterruptedException ie) {
+            ie.printStackTrace();
+        } catch (AmazonServiceException ase) {
+            System.out.println("Caught Exception: " + ase.getMessage());
+            System.out.println("Response Status Code: " + ase.getStatusCode());
+            System.out.println("Error Code: " + ase.getErrorCode());
+            System.out.println("Request ID: " + ase.getRequestId());
+        }
     }
 
     // Load Balancer Code
@@ -252,13 +334,27 @@ public class InstanceController {
                 controllerArgumentParser.getServerPort()), 0);
 
         server.createContext("/scan", new ScanHandler());
-        server.setExecutor(Executors.newCachedThreadPool());
+        server.setExecutor(InstanceController.newCachedThreadPoolWithQueue());
         server.start();
 
         startHealthChecker();
     }
 
+    private static ThreadPoolExecutor newCachedThreadPoolWithQueue() {
+        threadPoolExecutor = new ThreadPoolExecutor(
+                10,
+                20,
+                30,
+                TimeUnit.SECONDS,
+                new LinkedBlockingQueue<Runnable>()
+        );
+        threadPoolExecutor.allowCoreThreadTimeOut(true);
+        return threadPoolExecutor;
+    }
+
     private static void startHealthChecker() {
+        System.out.println("[HC] > Starting Health Checker");
+
         Executors.newScheduledThreadPool(1).scheduleWithFixedDelay(new Runnable() {
             @Override
             public void run() {
@@ -278,7 +374,6 @@ public class InstanceController {
 
                         if (instance.isUnhealthy()) {
                             instance.setPendingTermination();
-                            terminateInstance(instance);
                         }
 
                     } catch (MalformedURLException e) {
@@ -286,7 +381,7 @@ public class InstanceController {
                     }
                 }
             }
-        }, 120, 30, TimeUnit.SECONDS);
+        }, 120, 60, TimeUnit.SECONDS);
     }
 
     private static int pingInstance(URL url) {
@@ -295,7 +390,7 @@ public class InstanceController {
         try {
             connection = (HttpURLConnection) url.openConnection();
             connection.setRequestMethod("GET");
-            connection.setConnectTimeout(5000);
+            connection.setConnectTimeout(30000);
 
             return connection.getResponseCode();
 
@@ -320,6 +415,34 @@ public class InstanceController {
             startAutoScaler();
             startLoadBalancer();
 
+            /*DescribeInstancesResult describeInstancesResult = ec2.describeInstances();
+            List<Reservation> reservations = describeInstancesResult.getReservations();
+            Set<Instance> instances = new HashSet<>();
+
+            System.out.println("total reservations = " + reservations.size());
+            for (Reservation reservation : reservations) {
+                instances.addAll(reservation.getInstances());
+            }
+            String ip = "";
+            for (Instance instance : instances) {
+                System.out.println(">>>>>>>>RUN ONCE");
+                ip = instance.getPublicDnsName();
+            }
+
+            System.out.println(ip);
+
+            try {
+                URL url = new URL("http://" + ip + ":8000/scan");
+
+                if (pingInstance(url) != HttpURLConnection.HTTP_OK) {
+                    System.out.println("NOT OK");
+                }
+            } catch (MalformedURLException mue) {
+                System.out.println("ERROR");
+            } catch (Exception e) {
+                System.out.println("ERROR 2");
+            }*/
+
         } catch (AmazonServiceException ase) {
             System.out.println("Caught Exception: " + ase.getMessage());
             System.out.println("Response Status Code: " + ase.getStatusCode());
@@ -333,7 +456,7 @@ public class InstanceController {
     static class ScanHandler implements HttpHandler {
 
         @Override
-        public void handle(HttpExchange t) throws IOException {
+        public void handle(HttpExchange t) {
             final long threadId = Thread.currentThread().getId();
             final String query = t.getRequestURI().getQuery();
             final String[] queryPairs = query.split("&");
@@ -370,6 +493,8 @@ public class InstanceController {
             instanceInfo.addPendingRequest(String.format("%d:%s", threadId, query), workloadLevel);
 
             HttpURLConnection connection = null;
+
+            System.out.println("[LB-%s] > Sending request to: " + instanceInfo.getInstanceIp());
 
             try {
                 URL url = new URL("http://" + instanceInfo.getInstanceIp() + ":8000/scan?" + query);
@@ -426,19 +551,19 @@ public class InstanceController {
 
                 int area = width * height;
                 int diffAreas, approxArea = area;
-                Item itemToLockup = null;
+                Item itemToLookup = null;
 
                 for (Item item : items) {
-                    System.out.println(item.toJSONPretty());
+                    System.out.println("[DB] > Item: " + item.toJSONPretty());
                     diffAreas = Math.abs(area - item.getInt("Area"));
 
                     if (diffAreas < approxArea) {
                         approxArea = diffAreas;
-                        itemToLockup = item;
+                        itemToLookup = item;
                     }
                 }
 
-                return itemToLockup != null ? itemToLockup.getInt("Complexity") : getDefaultRequestComplexity(strategy, area);
+                return itemToLookup != null ? itemToLookup.getInt("Complexity") : getDefaultRequestComplexity(strategy, area);
 
             } catch (AmazonServiceException ase) {
                 System.out.println("Caught an AmazonServiceException, which means your request made it "
@@ -459,26 +584,13 @@ public class InstanceController {
         }
 
         private static int getDefaultRequestComplexity(String strategy, int area) {
-            if (area <= 10000) {
-                return 1;
-            } else if (area <= 100000) {
-                return 2;
-            } else if (area <= 150000) {
-                return 3;
-            } else if (area <= 250000) {
-                return 4;
-            } else if (area <= 350000) {
-                return 5;
-            } else if (area <= 500000) {
-                return 6;
-            } else if (area <= 800000) {
-                return 7;
-            } else if (area <= 1000000) {
-                return 8;
-            } else if (area <= 2000000) {
-                return 9;
-            } else {
-                return 10;
+            switch (strategy) {
+                case GRID_SCAN:
+                    return area * 3;
+                case GREEDY_RANGE_SCAN:
+                    return area * 2;
+                default:
+                    return area;
             }
         }
 
